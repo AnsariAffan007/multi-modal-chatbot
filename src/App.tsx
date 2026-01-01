@@ -31,16 +31,28 @@ function App() {
     if (promptInputRef.current) promptInputRef.current.value = ""
     setLoading(true)
     // Send request to api via sdk
-    const response = await openaiClient.chat.completions.create({
+    const stream = await openaiClient.chat.completions.create({
       messages: [
         { role: "system", content: "You are a helpful assistant, which always replies in markdown" },
         { role: "user", content: prompt }
       ],
-      model: "gemma3:1b"
+      model: "gemma3:1b",
+      stream: true
     })
-    // Get response and set messages state
-    const responseMessage = response.choices[0].message.content
-    if (responseMessage) setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
+    // Read response stream and set messages state
+    let responseMessage = ""
+    setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
+    for await (const event of stream) {
+      const responseMessageChunk = event.choices[0].delta.content
+      if (responseMessageChunk) {
+        responseMessage += responseMessageChunk
+        setMessages(prev => {
+          const temp = [...prev]
+          temp[temp.length - 1]["content"] = responseMessage
+          return temp;
+        })
+      }
+    }
     setLoading(false)
   }
 
@@ -63,11 +75,6 @@ function App() {
                   <Markdown>{message.content}</Markdown>
                 </div>
               ))}
-              {loading && (
-                <div className="message" style={{ width: "40px", textAlign: "center" }}>
-                  <div className="loading"></div>
-                </div>
-              )}
             </div>
           </SimpleBar>
         </div>
