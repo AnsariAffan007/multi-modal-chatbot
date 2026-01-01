@@ -27,13 +27,16 @@
 .container>.chatbox>.chatarea {
   flex: 1;
   overflow-y: auto;
+}
+
+.container>.chatbox>.chatarea .chats-container {
   padding: 16px;
   display: flex;
   flex-direction: column;
   row-gap: 16px;
 }
 
-.container>.chatbox>.chatarea>.message {
+.container>.chatbox>.chatarea .message {
   padding: 8px;
   border-radius: 8px;
   border: 1px solid #ddd;
@@ -42,11 +45,11 @@
   color: #222;
 }
 
-.container>.chatbox>.chatarea>.message.sent {
+.container>.chatbox>.chatarea .message.sent {
   margin-left: auto;
 }
 
-.container>.chatbox>.chatarea>.message.recieved {
+.container>.chatbox>.chatarea .message.recieved {
   margin-right: auto;
 }
 
