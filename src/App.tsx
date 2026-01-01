@@ -4,6 +4,7 @@ import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 import OpenAI from "openai";
 import Markdown from 'react-markdown'
+import SimplebarCore from "simplebar"
 
 const openaiClient = new OpenAI({
   baseURL: "http://localhost:11434/v1/",
@@ -29,6 +30,8 @@ function App() {
     setMessages(prev => ([...prev, { party: "self", content: prompt }]))
     // Clear the prompt input
     if (promptInputRef.current) promptInputRef.current.value = ""
+    // Scroll to bottom
+    scrollToBottom()
     setLoading(true)
     // Send request to api via sdk
     const stream = await openaiClient.chat.completions.create({
@@ -51,9 +54,22 @@ function App() {
           temp[temp.length - 1]["content"] = responseMessage
           return temp;
         })
+        scrollToBottom()
       }
     }
     setLoading(false)
+  }
+
+  // #region Scroll
+  const simplebarRef = useRef<SimplebarCore>(null)
+  const scrollToBottom = () => {
+    const scrollEl = simplebarRef.current?.getScrollElement()
+    if (scrollEl) {
+      scrollEl.scrollTo({
+        top: scrollEl.scrollHeight,
+        behavior: "smooth"
+      })
+    }
   }
 
   // #region JSX
@@ -65,7 +81,7 @@ function App() {
           <p>Multi-modal Chatbot</p>
         </div>
         <div className="chatarea">
-          <SimpleBar style={{ height: "100%" }}>
+          <SimpleBar style={{ height: "100%" }} ref={simplebarRef}>
             <div className="chats-container">
               {messages.map((message, index) => (
                 <div
