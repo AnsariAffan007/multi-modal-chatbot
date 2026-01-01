@@ -27,6 +27,8 @@ function App() {
     if (!prompt || prompt === '') return;
     // Add user prompt to messages state
     setMessages(prev => ([...prev, { party: "self", content: prompt }]))
+    // Clear the prompt input
+    if (promptInputRef.current) promptInputRef.current.value = ""
     setLoading(true)
     // Send request to api via sdk
     const response = await openaiClient.chat.completions.create({
@@ -39,8 +41,6 @@ function App() {
     // Get response and set messages state
     const responseMessage = response.choices[0].message.content
     if (responseMessage) setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
-    // Clear the prompt input
-    if (promptInputRef.current) promptInputRef.current.value = ""
     setLoading(false)
   }
 
@@ -63,11 +63,16 @@ function App() {
                   <Markdown>{message.content}</Markdown>
                 </div>
               ))}
+              {loading && (
+                <div className="message" style={{ width: "40px", textAlign: "center" }}>
+                  <div className="loading"></div>
+                </div>
+              )}
             </div>
           </SimpleBar>
         </div>
         <form onSubmit={sendMessage} className="chatinput">
-          <input name="chat-prompt" type="text" placeholder="Type your prompt" ref={promptInputRef} />
+          <input autoComplete="off" name="chat-prompt" type="text" placeholder="Type your prompt" ref={promptInputRef} />
           <button type="submit" disabled={loading}>Send {" >"}</button>
         </form>
       </div>
