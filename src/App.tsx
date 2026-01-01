@@ -3,6 +3,7 @@ import "./app.css"
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
 import OpenAI from "openai";
+import Markdown from 'react-markdown'
 
 const openaiClient = new OpenAI({
   baseURL: "http://localhost:11434/v1/",
@@ -10,30 +11,40 @@ const openaiClient = new OpenAI({
   dangerouslyAllowBrowser: true
 });
 
+// #region MAIN
 function App() {
 
-  // const [messages, setMessages] = useState<{ party: "ai" | "self", message: string }[]>([])
+  const [messages, setMessages] = useState<{ party: "ai" | "self", content: string }[]>([])
 
-  const [_loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const promptInputRef = useRef<HTMLInputElement>(null)
+
+  // #region Submit
   const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    // Basic validation
     const prompt = new FormData(e.currentTarget).get('chat-prompt') as string
     if (!prompt || prompt === '') return;
+    // Add user prompt to messages state
+    setMessages(prev => ([...prev, { party: "self", content: prompt }]))
     setLoading(true)
+    // Send request to api via sdk
     const response = await openaiClient.chat.completions.create({
       messages: [
-        { role: "system", content: "You are a helpful assistant" },
+        { role: "system", content: "You are a helpful assistant, which always replies in markdown" },
         { role: "user", content: prompt }
       ],
       model: "gemma3:1b"
     })
+    // Get response and set messages state
     const responseMessage = response.choices[0].message.content
-    console.log(responseMessage)
+    if (responseMessage) setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
+    // Clear the prompt input
     if (promptInputRef.current) promptInputRef.current.value = ""
     setLoading(false)
   }
 
+  // #region JSX
   return (
     <div className="container">
 
@@ -44,38 +55,20 @@ function App() {
         <div className="chatarea">
           <SimpleBar style={{ height: "100%" }}>
             <div className="chats-container">
-              <div className="message sent">Hello</div>
-              <div className="message recieved">Hi, How can I help you?</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message sent">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
-              <div className="message recieved">This is a long message just to test the UI if it overflows, gets wrapped, or the max width takes effect or not</div>
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`message ${message.party === "self" ? "sent" : "recieved"}`}
+                >
+                  <Markdown>{message.content}</Markdown>
+                </div>
+              ))}
             </div>
           </SimpleBar>
         </div>
         <form onSubmit={sendMessage} className="chatinput">
           <input name="chat-prompt" type="text" placeholder="Type your prompt" ref={promptInputRef} />
-          <button type="submit">Send {" >"}</button>
+          <button type="submit" disabled={loading}>Send {" >"}</button>
         </form>
       </div>
 
