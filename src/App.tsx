@@ -36,7 +36,8 @@ function App() {
     // Send request to api via sdk
     const stream = await openaiClient.chat.completions.create({
       messages: [
-        { role: "system", content: "You are a helpful assistant, which always replies in markdown" },
+        { role: "system", content: "You are very sarcastic" },
+        ...messages.map(m => ({ role: m.party === "ai" ? "assistant" as const : "user" as const, content: m.content })),
         { role: "user", content: prompt }
       ],
       model: "gemma3:1b",
