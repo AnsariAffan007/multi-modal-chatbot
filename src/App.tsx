@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./app.css"
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
@@ -6,16 +6,50 @@ import OpenAI from "openai";
 import Markdown from 'react-markdown'
 import SimplebarCore from "simplebar"
 
+// #region sdk init
 const openaiClient = new OpenAI({
-  baseURL: "http://localhost:11434/v1/",
-  apiKey: "ollama",
+  // baseURL: "http://localhost:11434/v1/",
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: import.meta.env.VITE_OPENROUTER_API_KEY,
   dangerouslyAllowBrowser: true
 });
+
+const MODEL = "mistralai/devstral-2512:free"
+
+// #region Tools
+const ticketPrices: Record<string, string> = { "london": "$799", "paris": "$899", "tokyo": "$1400", "berlin": "$499" }
+const getTicketPrice = (city: string) => {
+  return ticketPrices[city.toLowerCase()] || "No price for specified city found"
+}
+
+const ticketPriceTool: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "getTicketPrice",
+    description: "Returns ticket price of a given city",
+    parameters: {
+      type: "object",
+      properties: {
+        "destination_city": {
+          type: "string",
+          description: "The city that the customer wants to travel to"
+        }
+      },
+      additionalProperties: false
+    },
+    strict: false
+  }
+}
+
+const LLM_TOOLS: Record<string, (city: string) => string> = {
+  getTicketPrice: getTicketPrice
+}
 
 // #region MAIN
 function App() {
 
   const [messages, setMessages] = useState<{ party: "ai" | "self", content: string }[]>([])
+  const [history, setHistory] = useState<OpenAI.Chat.Completions.ChatCompletionMessageParam[]>([])
 
   const [loading, setLoading] = useState(false)
   const promptInputRef = useRef<HTMLInputElement>(null)
@@ -31,33 +65,72 @@ function App() {
     // Clear the prompt input
     if (promptInputRef.current) promptInputRef.current.value = ""
     // Scroll to bottom
-    scrollToBottom()
     setLoading(true)
     // Send request to api via sdk
-    const stream = await openaiClient.chat.completions.create({
+    const response = await openaiClient.chat.completions.create({
       messages: [
-        { role: "system", content: "You are very sarcastic" },
-        ...messages.map(m => ({ role: m.party === "ai" ? "assistant" as const : "user" as const, content: m.content })),
+        { role: "system", content: "Only call function if user asks for date. If not, respond normally." },
+        ...history,
         { role: "user", content: prompt }
       ],
-      model: "gemma3:1b",
-      stream: true
+      model: MODEL,
+      // stream: true,
+      tools: [
+        { ...ticketPriceTool }
+      ]
     })
     // Read response stream and set messages state
-    let responseMessage = ""
-    setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
-    for await (const event of stream) {
-      const responseMessageChunk = event.choices[0].delta.content
-      if (responseMessageChunk) {
-        responseMessage += responseMessageChunk
-        setMessages(prev => {
-          const temp = [...prev]
-          temp[temp.length - 1]["content"] = responseMessage
-          return temp;
+    // let responseMessage = ""
+    // setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
+    // for await (const event of stream) {
+    //   const responseMessageChunk = event.choices[0].delta.content
+    //   if (responseMessageChunk) {
+    //     responseMessage += responseMessageChunk
+    //     setMessages(prev => {
+    //       const temp = [...prev]
+    //       temp[temp.length - 1]["content"] = responseMessage
+    //       return temp;
+    //     })
+    //     scrollToBottom()
+    //   }
+    // }
+
+    let toolCallResponse = { ...response }
+    let tempMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      { role: "user", content: prompt },
+      { ...response.choices[0].message }
+    ]
+
+    while (toolCallResponse.choices[0].finish_reason === "tool_calls") {
+      const tempToolCallResponseMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
+      for (const toolCall of toolCallResponse.choices[0].message.tool_calls || []) {
+        if (toolCall.type !== "function") continue;
+        const argumentsJSON = JSON.parse(toolCall.function.arguments)
+        tempToolCallResponseMessages.push({
+          role: "tool",
+          content: LLM_TOOLS[toolCall.function.name](argumentsJSON.destination_city),
+          tool_call_id: toolCall.id
         })
-        scrollToBottom()
       }
+      tempMessages = [...tempMessages, ...tempToolCallResponseMessages]
+      toolCallResponse = await openaiClient.chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: "system", content: "You are a helpful assistant" },
+          ...history,
+          ...tempMessages
+        ],
+        tools: [
+          { ...ticketPriceTool }
+        ]
+      })
+      tempMessages.push(toolCallResponse.choices[0].message)
     }
+
+    setHistory(prev => [...prev, ...tempMessages])
+
+    // Set message
+    setMessages(prev => [...prev, { party: "ai", content: toolCallResponse.choices[0].message.content || "" }])
     setLoading(false)
   }
 
@@ -72,6 +145,10 @@ function App() {
       })
     }
   }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
 
   // #region JSX
   return (
