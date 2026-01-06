@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { Stream } from "openai/streaming";
 import type { FormEvent } from "react";
 
 // #region sdk init
@@ -49,20 +50,7 @@ const useSubmit = (
       // ]
     })
     // #region handle stream res
-    let responseMessage = ""
-    setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
-    for await (const event of stream) {
-      const responseMessageChunk = event.choices[0].delta.content
-      if (responseMessageChunk) {
-        responseMessage += responseMessageChunk
-        setMessages(prev => {
-          const temp = [...prev]
-          temp[temp.length - 1]["content"] = responseMessage
-          return temp;
-        })
-        scrollToBottom()
-      }
-    }
+    const responseMessage = await handleStreamResponse(stream)
 
     // #region handle tool calls
     // let toolCallResponse = { ...response }
@@ -103,6 +91,27 @@ const useSubmit = (
     // Set message
     // setMessages(prev => [...prev, { party: "ai", content: responseMessage || "" }])
     setLoading(false)
+  }
+
+  // #region handle stream
+  const handleStreamResponse = async (stream: Stream<OpenAI.Chat.Completions.ChatCompletionChunk> & {
+    _request_id?: string | null;
+  }) => {
+    let responseMessage = ""
+    setMessages(prev => ([...prev, { party: "ai", content: responseMessage }]))
+    for await (const event of stream) {
+      const responseMessageChunk = event.choices[0].delta.content
+      if (responseMessageChunk) {
+        responseMessage += responseMessageChunk
+        setMessages(prev => {
+          const temp = [...prev]
+          temp[temp.length - 1]["content"] = responseMessage
+          return temp;
+        })
+        scrollToBottom()
+      }
+    }
+    return responseMessage
   }
 
   return sendMessage;
