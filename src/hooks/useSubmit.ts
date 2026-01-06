@@ -22,8 +22,10 @@ const useSubmit = (
   scrollToBottom: () => void
 ) => {
 
-  const MODEL = "mistralai/devstral-2512:free"
+  const TEXT_MODEL = "mistralai/devstral-2512:free"
+  const IMAGE_MODEL = "openai/gpt-5-image"
 
+  // -----------------------------------------------------------------------------------------
   // #region Submit
   const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -34,23 +36,48 @@ const useSubmit = (
     setMessages(prev => ([...prev, { party: "self", content: prompt }]))
     // Clear the prompt input
     if (promptInputRef.current) promptInputRef.current.value = ""
-    // Scroll to bottom
+    // Check if prompt asks for image or text
+    const requestType = await getRequestType(prompt)
     setLoading(true)
-    // Send request to api via sdk
-    const stream = await openaiClient.chat.completions.create({
-      messages: [
-        { role: "system", content: "Only call function if user asks for date. If not, respond normally." },
-        ...history,
-        { role: "user", content: prompt }
-      ],
-      model: MODEL,
-      stream: true,
-      // tools: [
-      //   { ...ticketPriceTool }
-      // ]
-    })
-    // #region handle stream res
-    const responseMessage = await handleStreamResponse(stream)
+
+    // #region text response
+    let responseMessage = ""
+    if (requestType === "text") {
+      const stream = await openaiClient.chat.completions.create({
+        messages: [
+          { role: "system", content: "You answer in short. If you dont know the answer, you clearly say so" },
+          ...history,
+          { role: "user", content: prompt }
+        ],
+        model: TEXT_MODEL,
+        stream: true,
+        // tools: [
+        //   { ...ticketPriceTool }
+        // ]
+      })
+      responseMessage = await handleStreamResponse(stream)
+    }
+    // #region image response
+    if (requestType === "image") {
+      const responseString = await openaiClient.chat.completions.create({
+        model: IMAGE_MODEL,
+        messages: [
+          { role: 'user', content: 'Generate a beautiful sunset over mountains', },
+        ],
+        modalities: ['image' as "text", 'text']
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let response: any;
+      try { response = JSON.stringify(responseString) }
+      catch (e) { console.log("Error..." + e) }
+      console.log("Response: ", response)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response?.choices?.[0]?.message?.images?.forEach((image: any) => {
+        setMessages(prev => [...prev, { party: "ai", content: `![generated image](${image.image_url.url})` }])
+      })
+      setLoading(false)
+      return;
+    }
 
     // #region handle tool calls
     // let toolCallResponse = { ...response }
@@ -91,6 +118,19 @@ const useSubmit = (
     // Set message
     // setMessages(prev => [...prev, { party: "ai", content: responseMessage || "" }])
     setLoading(false)
+  }
+  // -----------------------------------------------------------------------------------------
+
+  // #region Request type
+  const getRequestType = async (prompt: string) => {
+    const response = await openaiClient.chat.completions.create({
+      model: "openai/gpt-3.5-turbo",
+      messages: [
+        { role: "system", content: "Based on if prompt is asking for 'image' or 'text', you just response with 'image' or 'text', no matter what" },
+        { role: "user", content: prompt }
+      ]
+    })
+    return response.choices[0].message.content as "image" | "text"
   }
 
   // #region handle stream
